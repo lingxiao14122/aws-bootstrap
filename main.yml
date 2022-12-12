@@ -25,6 +25,7 @@ Parameters:
     Description: 'A GitHub personal access token with "repo" and "admin:repo_hook" permissions.'
 
 Resources:
+  # Allows incoming traffic on ports 8080 and 22 from any source IP address (0.0.0.0/0)
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -41,7 +42,7 @@ Resources:
       Tags:
         - Key: Name
           Value: !Ref AWS::StackName
-
+  # IAM role that is attached to the instance, permission to access CloudWatch and for codedeploy to build artefect
   InstanceRole:
     Type: "AWS::IAM::Role"
     Properties:
@@ -59,13 +60,13 @@ Resources:
       Tags:
         - Key: Name
           Value: !Ref AWS::StackName
-
+  # Used by instance to associate Instance with InstanceRole
   InstanceProfile:
     Type: "AWS::IAM::InstanceProfile"
     Properties:
       Roles:
         - Ref: InstanceRole
-
+  # Actual instance
   Instance:
     Type: AWS::EC2::Instance
     CreationPolicy:
@@ -134,7 +135,7 @@ Resources:
       Tags:
         - Key: Name
           Value: !Ref AWS::StackName
-
+  # IAM role for CodePipeline, CodeDeploy, and CodeBuild to perform actions
   DeploymentRole:
     Type: AWS::IAM::Role
     Properties:
@@ -150,7 +151,7 @@ Resources:
           Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/PowerUserAccess
-
+  # CodeBuildProject, use DeploymentRole and expects a CODEPIPELINE as source  
   BuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
@@ -164,13 +165,13 @@ Resources:
         Image: aws/codebuild/standard:2.0
       Source:
         Type: CODEPIPELINE
-
+  # CodeDeploy Application, used by StagingDeploymentGroup
   DeploymentApplication:
     Type: AWS::CodeDeploy::Application
     Properties:
       ApplicationName: !Ref AWS::StackName
       ComputePlatform: Server
-
+  # CodeDeploy DeploymentGroup, specify deployment configuration
   StagingDeploymentGroup:
     Type: AWS::CodeDeploy::DeploymentGroup
     DependsOn: Instance
@@ -183,7 +184,7 @@ Resources:
         - Key: aws:cloudformation:stack-name
           Type: KEY_AND_VALUE
           Value: !Ref AWS::StackName
-
+  # CodePipeline pipeline, specifies the source, build, and deployment stages and the respective configurations
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
@@ -239,7 +240,7 @@ Resources:
                 ApplicationName: !Ref DeploymentApplication
                 DeploymentGroupName: !Ref StagingDeploymentGroup
               RunOrder: 1
-
+  # This is a CodePipeline webhook that allows the pipeline to be triggered by events in the GitHub repository
   PipelineWebhook:
     Type: AWS::CodePipeline::Webhook
     Properties:
