@@ -1,5 +1,6 @@
 #!/bin/bash
 
+DOMAIN=oneboxapp.tech
 STACK_NAME=awsbootstrap
 REGION=us-east-1
 CLI_PROFILE=awsbootstrap
@@ -59,6 +60,7 @@ aws cloudformation deploy \
   --capabilities CAPABILITY_NAMED_IAM \
   --parameter-overrides \
     EC2InstanceType=$EC2_INSTANCE_TYPE \
+    Domain=$DOMAIN \
     GitHubOwner=$GH_OWNER \
     GitHubRepo=$GH_REPO \
     GitHubBranch=$GH_BRANCH \
