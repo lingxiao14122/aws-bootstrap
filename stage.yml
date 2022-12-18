@@ -4,11 +4,14 @@ Parameters:
   EC2InstanceType:
     Type: String
   EC2AMI:
-    Type: "String"
+    Type: String
   Domain:
     Type: String
   SubDomain:
     Type: String
+  Certificate:
+    Type: String
+    Description: 'An existing ACM certificate ARN for subdomain.domain'
 
 Resources:
   # Allows incoming traffic on ports 8080 and 22 from any source IP address (0.0.0.0/0)
@@ -23,8 +26,16 @@ Resources:
           ToPort: 8080
           CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
+          FromPort: 8443
+          ToPort: 8443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
           CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
           FromPort: 22
@@ -124,6 +135,12 @@ Resources:
 
               # Create log directory
               mkdir -p /home/ec2-user/app/logs
+
+              # Create a self-signed TLS certificate to communicate with the load balancer
+              mkdir -p /home/ec2-user/app/keys
+              cd /home/ec2-user/app/keys
+              openssl req -new -newkey rsa:4096 -days 365 -nodes -x509 \
+                          -subj "/C=/ST=/L=/O=/CN=localhost" -keyout key.pem -out cert.pem
             EOF
 
             chown ec2-user:ec2-user /tmp/install_script.sh && chmod a+x /tmp/install_script.sh
@@ -144,6 +161,16 @@ Resources:
             # Signal to CloudFormation that the instance is ready
             /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --region ${AWS::Region} --resource ${!LOGICAL_ID}
 
+  DNS:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName: !Sub '${Domain}.'
+      Name: !Sub '${SubDomain}.${Domain}.'
+      Type: A
+      AliasTarget:
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+        DNSName: !GetAtt LoadBalancer.DNSName
+
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -158,7 +185,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 0, !GetAZs '' ]  
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
       CidrBlock: 10.0.0.0/18
       MapPublicIpOnLaunch: true
       Tags:
@@ -171,9 +198,9 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 1, !GetAZs '' ] 
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
       CidrBlock: 10.0.64.0/18
-      MapPublicIpOnLaunch: true 
+      MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
           Value: !Ref AWS::StackName
@@ -249,6 +276,7 @@ Resources:
         Version: !GetAtt InstanceLaunchTemplate.LatestVersionNumber
       TargetGroupARNs:
         - !Ref LoadBalancerTargetGroup
+        - !Ref HTTPSLoadBalancerTargetGroup
       MetricsCollection:
         -
           Granularity: "1Minute"
@@ -287,6 +315,18 @@ Resources:
       Port: 80
       Protocol: HTTP
 
+  HTTPSLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref HTTPSLoadBalancerTargetGroup
+      LoadBalancerArn: !Ref LoadBalancer
+      Certificates:
+        - CertificateArn: !Ref Certificate
+      Port: 443
+      Protocol: HTTPS
+
   LoadBalancerTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
@@ -300,20 +340,26 @@ Resources:
         - Key: Name
           Value: !Ref AWS::StackName
   
-  DNS:
-    Type: AWS::Route53::RecordSet
+  HTTPSLoadBalancerTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      HostedZoneName: !Sub '${Domain}.'
-      Name: !Sub '${SubDomain}.${Domain}.'
-      Type: A
-      AliasTarget:
-        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
-        DNSName: !GetAtt LoadBalancer.DNSName
+      TargetType: instance
+      Port: 8443
+      Protocol: HTTPS
+      VpcId: !Ref VPC
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTPS
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
 
 Outputs:
   LBEndpoint:
     Description: The DNS name for the stage
     Value: !Sub "http://${DNS}"
+  HTTPSEndpoint:
+    Description: The DNS name for the stage
+    Value: !Sub "https://${DNS}"
   ScalingGroup:
     Description: The ScalingGroup for this stage
     Value: !Ref ScalingGroup
