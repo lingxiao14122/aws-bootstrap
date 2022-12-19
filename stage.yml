@@ -14,28 +14,21 @@ Parameters:
     Description: "An existing ACM certificate ARN for subdomain.domain"
 
 Resources:
-  # Allows incoming traffic on ports 8080 and 22 from any source IP address (0.0.0.0/0)
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       VpcId: !Ref VPC
-      GroupDescription: !Sub "Security group for ${AWS::StackName}"
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 8443
-          ToPort: 8443
-          CidrIp: 0.0.0.0/0
+      GroupDescription:
+        !Sub 'Security group for ${AWS::StackName}'
+      SecurityGroupIngress: 
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
           Value: !Ref AWS::StackName
+
   PrivateSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
