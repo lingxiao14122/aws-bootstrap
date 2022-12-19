@@ -76,3 +76,5 @@ if [ $? -eq 0 ]; then
     --profile awsbootstrap \
     --query "Exports[?ends_with(Name,'LBEndpoint')].Value"
 fi
+
+beep -c 100
